@@ -1,0 +1,297 @@
+'This script detects SWRs and measures their duration from onset to offset. 
+'It requires a state channel marking NREM states as code 02 and 4 channels named
+'Hipp, mPFC, Somato and EMG; 
+
+'========================================================================================'
+var CurrentView%;
+'Set path
+FilePathSet("G:\\Intra\\Thalamus\\1. Intra\\", 0,1);
+'Open file\
+
+'CurrentView%:=FileOpen("G:\\Intra\\Thalamus\\1. Intra\\*.smr",0, 3);
+CurrentView%:=FrontView(); 
+Window(0,0,100,100);
+'========================================================================================'
+
+'Declare variables
+
+var SWRfil% := 116; 
+var State%:=100;
+
+
+    var title$:=WindowTitle$();
+    var mPFCv%[2]; ChanList(mPFCv%, "=mPFC");  const mPFC% :=  mPFCv%[1];               'find channels       
+    var Somatov%[2]; ChanList(Somatov%, "=Somato");  const Somato% := Somatov%[1];         'find channels
+    var Hippv%[2]; ChanList(Hippv%, "=Hipp");  const Hipp% := Hippv%[1];          'find channels
+    var EMGv%[2]; ChanList(EMGv%, "=EMG_Signal");  const EMG% := EMGv%[1];       'find channels
+    var chlist%[5];   const nChan% :=4; 
+        chlist%[0] := nChan%; 
+        chlist%[1] := mPFC%;
+        chlist%[2] := Somato%;
+        chlist%[3] := Hipp%;
+        chlist%[4] := EMG%;
+    
+var mPFC_FR% := 1/BinSize(mPFC%);
+var Hipp_FR% := 1/BinSize(Hipp%);
+var Somato_FR% := 1/BinSize(Somato%);
+var EMG_FR% := 1/BinSize(EMG%);
+var Fr% := 10000; 
+var DsFactor% := Round(Fr%/100);
+var PathName$:=FileName$(-3);
+var k%;
+var newtxt%;
+
+'Declare memory channels
+var OnsetAverage%; 'View created by SetAverage
+var SWRDurations%; 'View created by Measure to XY
+
+var SWR%; 'MemChan created channel
+var SWROFFClean%; 'Memory channel created by MeasureToChan
+var SWRONClean%; 'Memory channel created by MeasureToChan
+var NoiseOFF%; 'Memory channel created by MeasureToChan
+var NoiseON%; 'Memory channel created by MeasureToChan
+var ch3%; 'MemChan created channel
+var SWROFF%; 'Memory channel created by MeasureToChan
+var SWRON%; 'Memory channel created by MeasureToChan
+var SWRMean;
+var SWRSD;
+var SWRPeakThreshold;
+var SWRTroughThreshold;
+
+'========================================================================================'
+'1. Choose a NREM epoch from which to calculate signal mean and sd; 
+View(CurrentView%);
+for k% := 1 to 200 do
+    ChanHide(k%)
+next
+ChanShow(SWRfil%);
+ChanShow (Hipp%);
+ChanShow (State%);
+YRange(SWRfil%, -0.2, 0.2);
+XRange(5000, 15000);
+CursorDelete(1); CursorDelete(2);
+CursorNew(5500,1);
+CursorNew(14500,2);
+Optimise(SWRfil%);ChanColourSet(SWRfil%, 1,0.000, 0.000, 0.753);               ' Channel primary colour:  22 Hipp
+Interact ("Use cursors 1 and 2 to mark epoch", 135);
+
+SWRMean:= ChanMeasure(SWRfil%, 2, Cursor(1), Cursor(2)); 'Define thresholds
+SWRSD:= ChanMeasure(SWRfil%, 12, Cursor(1), Cursor(2));
+SWRPeakThreshold := SWRMean+3.5*SWRSD;
+SWRTroughThreshold := SWRPeakThreshold/25;
+
+CursorActive(0,4, SWRfil%, 0.03, "", "", SWRPeakThreshold, 0, 0.3);   'Peak find; min.step 30 ms; thr
+CursorActive(1,5, SWRfil%, "Cursor(0)-0.05", "Cursor(0)", "", SWRTroughThreshold, 0, 0.1);   'Trough find
+CursorActive(2,15,SWRfil%, "Cursor(0)", "Cursor(0)+0.75", "", 0, 100, 0.5, "Cursor(1)");   'Repolarisation %
+
+'2. Measure preliminary SWR ON and OFF; 
+
+'Process setup for SWR ON
+MeasureX(102, 0, "Cursor(1)", "01"); ' The time of the item is the SWR onset
+SWRON% := MeasureToChan(0, "SWR ON", 5, 4, SWRfil%, 0.03, SWRPeakThreshold, 0, 1, "", 0.3);
+ProcessGate(State%, 1, 20, "02");
+Process(0, MaxTime(), 1, 1, SWRON%, 0);
+
+'Process setup for SWR OFF
+MeasureX(102, 0, "Cursor(2)", "01"); ' The time of the item
+SWROFF% := MeasureToChan(0, "SWR OFF", 5, 4, SWRfil%, 0.03, SWRPeakThreshold, 0, 1, "", 0.3);
+ProcessGate(State%, 1, 20, "02");
+Process(0, MaxTime(), 1, 1, SWROFF%, 0);
+
+MarkSet(SWRON%,0.0, MaxTime(),1,-1,-1,-1);
+
+'3. Mark epoch in NREM with EMG twitches; this will be used to filter out detected SWRs
+
+ChanProcessClear(EMG%, 0); 'Clear RMS amplitude from channel 4
+ChanProcessAdd(EMG%, 8); 'Add RMS amplitude to channel 4
+ChanProcessArg(EMG%, 1, 1, 1); 'Set RMS amplitude Time constant (s) to 1 second
+
+'2. Measure EMG noise; 
+CursorActive(1,0);
+CursorActive(2,0);
+View(CurrentView%);
+for k% := 1 to 200 do
+    ChanHide(k%)
+next
+ChanShow(EMG%);
+ChanShow (State%);
+XRange(5000, 15000);
+Optimise(EMG%);ChanColourSet(EMG%, 1,0.000, 0.000, 0.000);               ' Channel primary colour:  black EMG
+HCursorDelete(1); HCursorDelete(2); HCursorDelete(3); HCursorDelete(4);
+HCursorNew(EMG%);
+HCursorLabel (4, 1, "Noise Level");
+Interact ("Use horizontal cursors to set level for EMG noise", 135);
+
+MeasureX(102, 0, "Cursor(0)", "01"); ' The time of the item
+NoiseON% := MeasureToChan(0, "NoiseON", 5, 7, EMG%, 0.1, "HCursor(1)", 0, 1, "", 0.1);
+ProcessGate(State%, 0, 20, "02");
+Process(0, MaxTime(), 1, 1, NoiseON%, 0);
+
+'Process setup
+MeasureX(102, 0, "Cursor(0)", "01"); ' The time of the item
+NoiseOFF% := MeasureToChan(0, "Noise", 5, 8, EMG%, 0.1, "HCursor(1)", 0, 1, "", 0.1);
+ProcessGate(State%, 0, 20, "02");
+Process(0, MaxTime(), 1, 1, NoiseOFF% , 0);
+
+    MarkSet(NoiseON%,0.0, MaxTime(),1,-1,-1,-1);
+    MemImport(NoiseOFF%, NoiseON%, 0.0, MaxTime());
+            DrawMode(NoiseOFF%, 15, 1, 0, 0); 'Set State
+            MarkShow(NoiseOFF%, 0, 0); 'Set marker to display and mode
+            DrawMode(NoiseOFF%, 15, 1, 0, 0); 'Set State
+            MarkShow(NoiseOFF%, 0, 0); 'Set marker to display and mode
+
+'4. Clean up detected SWRs
+
+'Process setup
+MeasureX(102, 0, "Cursor(0)", "01"); ' The time of the item
+SWRONClean% := MeasureToChan(0, "ONclean", 5, 14, SWRON%, 0, 1, 0, 1);
+ProcessGate(NoiseOFF%, 0, "00", NoiseOFF%, 0, "01");
+Process(0, MaxTime(), 1, 1, SWRONClean%, 0);
+'Process setup
+MeasureX(102, 0, "Cursor(0)", "00"); ' The time of the item
+SWROFFClean%  := MeasureToChan(0, "OFFclean", 5, 14, SWROFF%, 0, 1, 0, 1);
+ProcessGate(NoiseOFF%, 0, "00", NoiseOFF%, 0, "01");
+Process(0, MaxTime(), 1, 1, SWROFFClean%, 0);
+
+MarkSet(SWRONClean%,0.0, MaxTime(),1,-1,-1,-1);
+SWR% := MemChan(5); 'Add new Marker channel
+ChanTitle$(SWR%, "SWR");
+ChanShow(SWR%); 'Make it visible
+MemImport(SWR%, SWRONClean%, 0.0, MaxTime());
+MemImport(SWR%, SWROFFClean%, 0.0, MaxTime());
+DrawMode(SWR%, 15, 1, 0, 0); 'Set State
+MarkShow(SWR%, 0, 0); 'Set marker to display and mode
+DrawMode(SWR%, 15, 1, 0, 0); 'Set State
+MarkShow(SWR%, 0, 0); 'Set marker to display and mode
+
+
+
+'5. Plot waveform average
+View(CurrentView%); 
+var desiredFs% := 100; 
+for k% := 1 to 3 do
+    ChanProcessClear (chlist%[k%],0);
+    DsFactor% := 1/BinSize(chlist%[k%])/desiredFs%;
+    ChanProcessAdd(chlist%[k%], 5);                             ' Add Downsample to channel Somato
+    ChanProcessArg(chlist%[k%], 1, 1, DsFactor% );
+   'ChanProcessAdd(chlist%[k%], 2); 'Add DC Remove to channel 3
+    'ChanProcessArg(chlist%[k%], 2, 1, 2); 'Set DC Remove Time constant (s)
+    ChanShow(chlist%[k%]);
+    next
+
+ChanSelect(-1,0);                                       ' set all to deselect;
+ChanSelect(Hipp%, 1);
+ChanSelect(mPFC%, 1);
+ChanSelect(Somato%, 1);
+
+
+OnsetAverage% := SetAverage(-3,200,1, SWRONClean%,1,1);
+FrontView(View(OnsetAverage%));
+Process(0, View(-1).MaxTime(), 1, 1);
+
+        Window(41.4678, 0.904977,67.6014, 45.362);
+        YAxisMode(4, 1,8, 0);
+        XAxisMode(4);
+        FontSet("Times New Roman",12, 0); 'set view font
+        ChanPenWidth("3..1", 2);
+        ChanColourSet(3, 1,0.000, 0.000, 0.753);   ' Channel primary colour:   3 Hipp
+        ChanColourSet(2, 1,0.502, 0.251, 0.251);   ' Channel primary colour:   2 Somato
+        ChanColourSet(1, 1,1.000, 0.000, 0.000);   ' Channel primary colour:   1 mPFC
+        WindowTitle$("SWR-triggered average"); 'Set the view title
+
+'5. Measure durations
+View(CurrentView%);
+CursorActive(0,14, SWRONClean%, 0, "", "", 1);   'Data points
+CursorActive(1,14, SWROFFClean%, "Cursor(0)", "Cursor(0)+1.5", "", 1);   'Data points
+
+SWRDurations%:=MeasureToXY(14, SWRONClean%, 0, 1, 0);
+FrontView(View(SWRDurations%));
+MeasureX(102, 1, "Cursor(0)", "0");
+MeasureY(103, 1, "Cursor(1)", "Cursor(0)");
+MeasureChan(1,"SWR Durations");
+
+Process(0, View(-1).MaxTime(), 1, 1);
+   WindowTitle$("SWR Durations"); 'Set the view title
+
+'Measure SWR Rate
+
+View(CurrentView%);
+
+CursorActive(0,14, State%, 0, "", "", 1);   'Data points
+CursorActive(1,14, State%, "Cursor(0)", "MaxTime()", "", 1);   'Data points
+CursorActive(2,0);   'Data points
+var SWRRate%;
+SWRRate%:=MeasureToXY(14, State%, 0, 1, 0); 'mode 14 is data points
+    MeasureX(102, 1, "Cursor(0)", "0"); 'mode 100 is value: measure value of state
+    MeasureY(2, SWRONClean%, "Cursor(0)", "Cursor(1)"); 'mode 2 is mean: Count SWRs per epoch from SWRchan
+    MeasureChan(1,"SWR Durations");
+FrontView(View());
+ChanKey(0, "XY", 20, 0, 0);         'Set key position
+    ProcessGate(State%, 1, 20, "02");
+    Process(0, View(-1).Maxtime(), 1, 1, 0, 0);
+'Format the graph
+WindowVisible(3);
+XYJoin(1, 0);    'SetXY join mode
+    'YRange(-2, -4.65917, 97.8426); 'Visible channels
+    YAxisStyle(-1, 4, 1);
+    YAxisAttrib(-1, 0);
+    XAxisStyle(1, 5, 1);
+    XAxisAttrib(0);
+    Window(0.156576, 0.277008,30.7933, 41.6436);
+    FontSet("Times New Roman",14, 2); 'set view font
+WindowTitle$("SWR rate"); 'Set the view title
+
+'Save 
+
+View(CurrentView%);
+Window(12.4105, 23.5294,95.3461, 91.1765);
+FilePathSet(PathName$, 0,1);
+
+View(OnsetAverage%);
+Window(73.747, -0.678733,99.8807, 43.7783);
+FileSaveAs("SWR-Waveform-Average.srf",4);
+FileSaveAs("SWR-Waveform-Average.mat",100,0,"",5,
+"UseSName=0|UseCName=0|BinTimes=0|Compat=0"); 'Export (string args)
+
+View(SWRDurations%);
+FileSaveAs("SWR-Durations.sxy",12);
+FileSaveAs("SWR-Durations.mat",100,0,"",5,
+"UseSName=0|UseCName=0|BinTimes=0|Compat=0"); 'Export (string args)
+Window(73.5084, 43.0995,100.179, 99.4344);
+
+
+View(SWRRate%);
+FileSaveAs("SWR-Rate.sxy",12);
+FileSaveAs("SWR-Rate.mat",100,0,"",5,
+"UseSName=0|UseCName=0|BinTimes=0|Compat=0"); 'Export (string args)
+Window(73.5084, 43.0995,100.179, 99.4344);
+
+
+'Clean up
+
+View(CurrentView%);
+MemSave(SWR%,118,5,1);
+DrawMode(118, 15, 1, 0, 0); 'Set State
+MarkShow(118, 0, 0); 'Set marker to display and mode
+DrawMode(118, 15, 1, 0, 0); 'Set State
+MarkShow(118, 0, 0); 'Set marker to display and mode
+ChanShow(118);
+MemSave(NoiseOFF%,119,5,1); 
+DrawMode(119, 15, 1, 0, 0); 'Set State
+MarkShow(119, 0, 0); 'Set marker to display and mode
+DrawMode(119, 15, 1, 0, 0); 'Set State
+MarkShow(119, 0, 0); 'Set marker to display and mode
+ChanShow(119);
+
+
+for k%:=2000 to 2100 do
+    ChanDelete(k%);
+next
+
+CursorActive(1,0);   'Data points
+CursorActive(0,0);   'Data points
+
+for k% := 1 to nChan% do
+    ChanProcessClear (chlist%[k%],0);
+       next
+
