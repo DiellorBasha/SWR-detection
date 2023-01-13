@@ -21,6 +21,7 @@ Screenshot
 - Run SWR-detection using Script → Run Script →  Load and Run...
 - Navigate to path where you saved SWR-detection.
 - If you have spike detection in channel name ThalSpike, the program will output peri-events spike histogram referenced to the onset of the SWR. 
+- The raster is ordered according to the duration of the SWR, with short SWRs at the bottom and long SWRs at the top. 
 
 ![image](https://user-images.githubusercontent.com/49167439/212425418-1f9b3f0c-0b01-4a6b-8ec0-d22de0b74597.png)
 
