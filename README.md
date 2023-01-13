@@ -8,7 +8,6 @@ The program uses sleep states detected by [Sleep Stage Detection](https://ced.co
 Screenshot
 
 ![image](https://user-images.githubusercontent.com/49167439/212425374-bf55413e-343f-474b-ad57-ed21cdb3cfcd.png)
-![image](https://user-images.githubusercontent.com/49167439/212425418-1f9b3f0c-0b01-4a6b-8ec0-d22de0b74597.png)
 
 
 ### Dependencies
@@ -21,6 +20,9 @@ Screenshot
 - Use [Sleep Stage Detection](https://ced.co.uk/files/scripts/RatSleepAuto.zip) to first detect NREM states from local field potential and electromyographic recordings. 
 - Run SWR-detection using Script → Run Script →  Load and Run...
 - Navigate to path where you saved SWR-detection.
+- If you have spike detection in channel name ThalSpike, the program will output peri-events spike histogram referenced to the onset of the SWR. 
+
+![image](https://user-images.githubusercontent.com/49167439/212425418-1f9b3f0c-0b01-4a6b-8ec0-d22de0b74597.png)
 
 
 ## Built With
