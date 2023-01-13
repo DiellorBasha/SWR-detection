@@ -1,6 +1,3 @@
-# Spike2
-
-
 # SWR-detection
 
 SWR-detection is a collection of Spike2 scripts to help you detect sharp-wave ripples and cortical slow waves. It is primarily written for rodent recordings of the hippocampus and cortex. This Spike2 scripts sleep states detected by [Sleep Stage Detection](https://ced.co.uk/files/scripts/RatSleepAuto.zip) to restrict the search for sharp-wave ripples and slow waves to NREM periods. If you also have detected spikes, the program will output peri-event histograms referenced to the onset of the sharp-wave ripple and waveform averages calculated from LFP channels. 
