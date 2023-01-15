@@ -40,7 +40,7 @@ Screenshot
 
 - [Profile](https://github.com/DiellorBasha "DiellorBasha")
 - [Email](mailto:diellorbasha@gmail.com?subject=Hi "Hi!")
-- [Website](https://www.linkedin.com/in/diellor-basha-512b82171/)
+- [LinkedIn](https://www.linkedin.com/in/diellor-basha-512b82171/)
 
 ## 🤝 Support
 
